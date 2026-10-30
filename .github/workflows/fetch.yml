@@ -1,17 +1,6 @@
 name: fetch
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "15 12 * * 1-5"
-    - cron: "20 16 * * 1-5"
-    - cron: "5 19 * * 1-5"
-    - cron: "13 19 * * 1-5"
-    - cron: "30 20 * * 1-5"
-    - cron: "15 13 * * 1-5"
-    - cron: "20 17 * * 1-5"
-    - cron: "5 20 * * 1-5"
-    - cron: "13 20 * * 1-5"
-    - cron: "30 21 * * 1-5"
 permissions:
   contents: write
 concurrency:
@@ -22,16 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install --quiet yfinance==1.6.0 pandas numpy
       - run: python fetch.py
       - run: |
+          cp data/latest.json /tmp/latest.json
           git config user.name "trading-desk-bot"
           git config user.email "trading-desk-bot@users.noreply.github.com"
-          git add data/latest.json
-          git commit -m "data $(date -u +%Y-%m-%dT%H:%MZ)" || echo "no change"
-          git pull --rebase --quiet || true
-          git push
+          for i in 1 2 3 4 5; do
+            git fetch --quiet origin main
+            git reset --quiet --hard origin/main
+            mkdir -p data
+            cp /tmp/latest.json data/latest.json
+            git add data/latest.json
+            git commit --quiet -m "data $(date -u +%Y-%m-%dT%H:%MZ)" || { echo "no change"; exit 0; }
+            git push --quiet origin HEAD:main && exit 0
+            sleep $((i * 5))
+          done
+          exit 1
